@@ -11,7 +11,7 @@ async function getBrowser() {
   return sharedBrowser;
 }
 
-function buildCssVars(format) {
+export function buildCssVars(format) {
   const basePadXPct = 90 / 1080;
   const padX = Math.round(format.width * basePadXPct);
   const headerTop = Math.round(format.height * format.anchors.headerTopPct);
@@ -28,11 +28,20 @@ function buildCssVars(format) {
   };
 }
 
-export async function renderFrames({ format, outDir, fileUrl }) {
+async function applyCssVars(page, cssVars) {
+  await page.evaluate((styleVars) => {
+    const root = document.documentElement;
+    for (const [key, value] of Object.entries(styleVars)) {
+      root.style.setProperty(key, value);
+    }
+  }, cssVars);
+}
+
+export async function renderFrames({ browser, format, outDir, fileUrl }) {
   fs.mkdirSync(outDir, { recursive: true });
 
-  const browser = await getBrowser();
-  const context = await browser.newContext({
+  const browserToUse = browser ?? (await getBrowser());
+  const context = await browserToUse.newContext({
     viewport: { width: format.width, height: format.height },
     // 2x keeps text and edges crisp while controlling render time/storage.
     deviceScaleFactor: 2,
@@ -42,13 +51,7 @@ export async function renderFrames({ format, outDir, fileUrl }) {
   const renderUrl = `${fileUrl}?render=1&mode=video`;
   await page.goto(renderUrl, { waitUntil: 'load' });
 
-  const vars = buildCssVars(format);
-  await page.evaluate((styleVars) => {
-    const root = document.documentElement;
-    for (const [key, value] of Object.entries(styleVars)) {
-      root.style.setProperty(key, value);
-    }
-  }, vars);
+  await applyCssVars(page, buildCssVars(format));
 
   const duration = await page.evaluate(() => window.__duration ?? 10.0);
   const totalFrames = Math.round(duration * format.fps);
@@ -74,9 +77,30 @@ export async function shutdownCapture() {
   }
 }
 
-export async function renderStill({ format, outPath, url }) {
-  void format;
-  void outPath;
-  void url;
-  throw new Error('Not implemented');
+export async function renderStill({ browser, format, outPath, fileUrl, cssVars }) {
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+
+  const browserToUse = browser ?? (await getBrowser());
+  const context = await browserToUse.newContext({
+    viewport: { width: format.width, height: format.height },
+    // Keep stills consistent with frame rendering.
+    deviceScaleFactor: 2,
+  });
+
+  const page = await context.newPage();
+  const renderUrl = `${fileUrl}?render=1&mode=still`;
+  await page.goto(renderUrl, { waitUntil: 'load' });
+
+  await applyCssVars(page, cssVars ?? buildCssVars(format));
+
+  const hasStillRenderer = await page.evaluate(() => typeof window.__renderStill === 'function');
+  if (!hasStillRenderer) {
+    throw new Error(
+      `Still renderer missing for format ${format.key}: window.__renderStill is not defined in index.html?render=1&mode=still`,
+    );
+  }
+
+  await page.evaluate(() => window.__renderStill());
+  await page.screenshot({ path: outPath, type: 'png' });
+  await context.close();
 }

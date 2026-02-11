@@ -3,8 +3,9 @@ import { mkdir, access, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
 import { FORMATS, getFormatByKey } from './formats.js';
-import { renderFrames, shutdownCapture } from './capture.js';
+import { buildCssVars, renderFrames, renderStill, shutdownCapture } from './capture.js';
 import { assertFfmpegAvailable, encodeSilentMp4, muxAudio } from './ffmpeg.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,7 @@ function parseArgs(argv) {
     noRender: hasFlag(argv, '--no-render'),
     noEncode: hasFlag(argv, '--no-encode'),
     noMux: hasFlag(argv, '--no-mux'),
+    noStill: hasFlag(argv, '--no-still'),
     keepFrames: true,
   };
 
@@ -89,6 +91,7 @@ function formatPathsFor(key) {
     framesPattern: path.join(framesDir, '%06d.png'),
     silentMp4: path.join('dist', key, `festival_${key}_silent.mp4`),
     finalMp4: path.join('dist', key, `festival_${key}.mp4`),
+    stillPng: path.join('dist', key, `festival_${key}.png`),
   };
 }
 
@@ -161,6 +164,7 @@ async function main() {
   console.log(`- noRender: ${args.noRender}`);
   console.log(`- noEncode: ${args.noEncode}`);
   console.log(`- noMux: ${args.noMux}`);
+  console.log(`- noStill: ${args.noStill}`);
   console.log(`- keepFrames: ${args.keepFrames}`);
 
   if (!args.noMux && !fileExists(audioPath)) {
@@ -168,17 +172,25 @@ async function main() {
   }
 
   const summary = [];
+  const browser = await chromium.launch();
 
   try {
     await assertFfmpegAvailable();
 
     for (const format of selectedFormats) {
       const paths = formatPathsFor(format.key);
-      const formatSummary = { format: format.key, rendered: false, encoded: false, muxed: false };
+      const formatSummary = {
+        format: format.key,
+        rendered: false,
+        encoded: false,
+        muxed: false,
+        still: false,
+      };
       const framesDir = path.join(repoRoot, paths.framesDir);
       const firstFrame = path.join(repoRoot, paths.firstFrame);
       const silentMp4 = path.join(repoRoot, paths.silentMp4);
       const finalMp4 = path.join(repoRoot, paths.finalMp4);
+      const stillPng = path.join(repoRoot, paths.stillPng);
 
       console.log(`\n[${format.key}] Starting format build...`);
 
@@ -187,7 +199,7 @@ async function main() {
         console.log(`[${format.key}] --no-render set, skipping render.`);
       } else if (shouldRender) {
         console.log(`[${format.key}] Rendering frames...`);
-        await renderFrames({ format, outDir: framesDir, fileUrl });
+        await renderFrames({ browser, format, outDir: framesDir, fileUrl });
         formatSummary.rendered = true;
       } else {
         console.log(`[${format.key}] Frames exist, skipping render.`);
@@ -232,9 +244,28 @@ async function main() {
         }
       }
 
+      const shouldRenderStill = !args.noStill && (args.force || !fileExists(stillPng));
+      if (args.noStill) {
+        console.log(`[${format.key}] --no-still set, skipping still.`);
+      } else if (shouldRenderStill) {
+        console.log(`[${format.key}] Rendering still PNG...`);
+        await renderStill({
+          browser,
+          format,
+          outPath: stillPng,
+          fileUrl,
+          cssVars: buildCssVars(format),
+        });
+        console.log(`[${format.key}] Wrote ${paths.stillPng}`);
+        formatSummary.still = true;
+      } else {
+        console.log(`[${format.key}] Still PNG exists, skipping still.`);
+      }
+
       summary.push(formatSummary);
     }
   } finally {
+    await browser.close();
     await shutdownCapture();
   }
 
@@ -250,7 +281,10 @@ async function main() {
     const renderStatus = item.rendered ? 'rendered' : 'skipped';
     const encodeStatus = item.encoded ? 'encoded' : 'skipped';
     const muxStatus = item.muxed ? 'muxed' : 'skipped';
-    console.log(`- ${item.format}: render=${renderStatus}, encode=${encodeStatus}, mux=${muxStatus}`);
+    const stillStatus = item.still ? 'rendered' : 'skipped';
+    console.log(
+      `- ${item.format}: render=${renderStatus}, encode=${encodeStatus}, mux=${muxStatus}, still=${stillStatus}`,
+    );
   }
 }
 
