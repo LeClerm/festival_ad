@@ -93,3 +93,27 @@ export async function encodeSilentMp4({ format, framesDir, outPath }) {
 
   await runCommand('ffmpeg', args);
 }
+
+export async function muxAudio({ silentMp4Path, audioPath, outPath }) {
+  await mkdir(path.dirname(outPath), { recursive: true });
+
+  const args = [
+    '-y',
+    '-i',
+    silentMp4Path,
+    '-i',
+    audioPath,
+    '-c:v',
+    'copy',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-shortest',
+    '-movflags',
+    '+faststart',
+    outPath,
+  ];
+
+  await runCommand('ffmpeg', args);
+}
