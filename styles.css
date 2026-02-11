@@ -1,7 +1,12 @@
 :root{
-  /* 9:16 */
+  /* Default 9:16 layout geometry */
   --W: 1080px;
   --H: 1920px;
+  --padX: 90px;
+  --headerTop: 105px;
+  --footerBottom: 90px;
+  --middleY: 50%;
+  --uiScale: 1;
 
   --bg: #121416;
   --fg: #E9E9E6;       /* off-white */
@@ -10,7 +15,7 @@
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
 
   /* Preview scale (JS sets this); render mode forces 1 */
-  --scale: 1;
+  --scale: var(--uiScale);
 
   /* Gradient ending in your orange */
   --g1: #7AE4FF;
@@ -88,9 +93,9 @@ html,body{
 /* Header (centered) */
 .header{
   position: absolute;
-  top: 105px;
-  left: 90px;
-  right: 90px;
+  top: var(--headerTop);
+  left: var(--padX);
+  right: var(--padX);
   text-align: center;
   padding-bottom: 14px;
 }
@@ -127,9 +132,9 @@ html,body{
 /* Footer (centered) */
 .footer{
   position: absolute;
-  bottom: 90px;
-  left: 90px;
-  right: 90px;
+  bottom: var(--footerBottom);
+  left: var(--padX);
+  right: var(--padX);
   text-align: center;
 }
 
@@ -146,8 +151,8 @@ html,body{
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 90px;
-  right: 90px;
+  left: var(--padX);
+  right: var(--padX);
 }
 
 /* Stack sits at the vertical center */
@@ -155,7 +160,7 @@ html,body{
   position: absolute;
   left: 0;
   right: 0;
-  top: 50%;
+  top: var(--middleY);
   transform: translateY(-50%);
   height: 0; /* stats are absolutely positioned */
 }
@@ -247,12 +252,26 @@ html,body{
   position: absolute;
   left: 0;
   right: 0;
-  top: 47%;
+  top: var(--middleY);
   transform: translateY(-50%);
   text-align: center;
 
   opacity: 0;
   pointer-events: none;
+}
+
+.activities{
+  display: none;
+  font-size: 36px;
+  font-weight: 560;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+html[data-mode="video"] #activities{
+  display: none;
 }
 
 .themePrefix{
