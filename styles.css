@@ -1,0 +1,277 @@
+:root{
+  /* 9:16 */
+  --W: 1080px;
+  --H: 1920px;
+
+  --bg: #121416;
+  --fg: #E9E9E6;       /* off-white */
+  --muted: #C8C8C2;
+
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+
+  /* Preview scale (JS sets this); render mode forces 1 */
+  --scale: 1;
+
+  /* Gradient ending in your orange */
+  --g1: #7AE4FF;
+  --g2: #D5FF7A;
+  --g3: #FF8837;
+}
+
+html,body{
+  height: 100%;
+  margin: 0;
+  background: #0b0c0e;
+  font-family: var(--font);
+}
+
+.header, .main, .stack, .stat, .footer, .theme{
+  overflow: visible;
+}
+
+.stage{
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.frame{
+  width: var(--W);
+  height: var(--H);
+  background: var(--bg);
+  color: var(--fg);
+  position: relative;
+  overflow: hidden;
+
+  transform: scale(var(--scale));
+  transform-origin: center center;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.grain{
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,0.05) 0 2px, transparent 2px 100%),
+    radial-gradient(circle at 70% 30%, rgba(255,255,255,0.04) 0 1px, transparent 1px 100%),
+    radial-gradient(circle at 40% 80%, rgba(255,255,255,0.04) 0 1px, transparent 1px 100%);
+  mix-blend-mode: overlay;
+  filter: blur(0.2px);
+}
+
+/* Gradient utility */
+.gradientText{
+  background: linear-gradient(90deg, var(--g1) 0%, var(--g2) 45%, var(--g3) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Left accent bar */
+.accentBar{
+  position: absolute;
+  left: 18px;
+  top: 0px;
+  width: 5px;
+  height: 0px; /* JS animates */
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--g1) 0%, var(--g2) 45%, var(--g3) 100%);
+  opacity: 0.95;
+  box-shadow: 0 0 18px rgba(255,136,55,0.12);
+}
+
+/* Header (centered) */
+.header{
+  position: absolute;
+  top: 105px;
+  left: 90px;
+  right: 90px;
+  text-align: center;
+  padding-bottom: 14px;
+}
+
+.title{
+  font-weight: 740;
+  font-size: 92px;
+  letter-spacing: -0.035em;
+  line-height: 1.10;     /* was 1.02 */
+  padding-bottom: 0.12em;/* add descender room */
+  opacity: 0;
+  transform: translateY(10px);
+  display: inline-block;
+}
+
+.titleSub{
+  display: inline-block;
+  font-weight: 720;
+  font-size: 92px;
+  letter-spacing: -0.03em;
+  line-height: 1.08;     /* ensures same fix on the 2nd line */
+}
+
+.date{
+  margin-top: 18px;
+  font-size: 46px;
+  font-weight: 560;
+  color: var(--muted);
+  letter-spacing: -0.015em;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* Footer (centered) */
+.footer{
+  position: absolute;
+  bottom: 90px;
+  left: 90px;
+  right: 90px;
+  text-align: center;
+}
+
+.url{
+  font-size: 38px;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* Main */
+.main{
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 90px;
+  right: 90px;
+}
+
+/* Stack sits at the vertical center */
+.stack{
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 0; /* stats are absolutely positioned */
+}
+
+/* Stat line: fixed position, centered, bottom-aligned */
+.stat{
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;  /* true bottom alignment */
+  gap: 20px;
+  opacity: 0;
+  transform: translateY(10px);
+  padding-bottom: 8px;
+}
+
+.number{
+  font-size: 128px;
+  font-weight: 780;
+  letter-spacing: -0.05em;
+  color: var(--fg);
+  line-height: 1;
+  position: relative;
+  top: 0.15em;
+  display: inline-block;
+  padding-bottom: 0.10em;
+}
+
+.label{
+  font-size: 84px;
+  font-weight: 680;
+  letter-spacing: -0.03em;
+  line-height: 1.10;        /* was 1 */
+  padding-bottom: 0.10em;   /* gives descenders room */
+  display: inline-block;
+  background: linear-gradient(90deg, var(--g1) 0%, var(--g2) 45%, var(--g3) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.stat.isVisible{
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Odometer */
+.odo{
+  display: inline-flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.digit{
+  position: relative;
+  width: 0.62em;
+  height: 1em;          /* IMPORTANT: viewport is exactly 1em */
+  overflow: hidden;
+  border-radius: 14px;
+  background: transparent; /* no boxes */
+}
+
+/* no pseudo background */
+.digit::before{ content:none; }
+
+.digitCol{
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate3d(0,0,0);
+  will-change: transform;
+}
+
+/* CRITICAL: each row must be EXACTLY 1em tall (no padding) */
+.digitRow{
+  height: 1em;
+  line-height: 1em;
+  display: block;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+/* Theme block */
+.theme{
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 47%;
+  transform: translateY(-50%);
+  text-align: center;
+
+  opacity: 0;
+  pointer-events: none;
+}
+
+.themePrefix{
+  font-size: 52px;
+  font-weight: 620;
+  color: var(--muted);
+  letter-spacing: -0.012em;
+  margin-bottom: 16px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.themeMain{
+  font-size: 96px;            /* slightly larger */
+  font-weight: 820;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  text-shadow: 0 0 22px rgba(255,136,55,0.14);
+  display: inline-block;
+  transform-origin: center center;
+  will-change: transform;
+}
