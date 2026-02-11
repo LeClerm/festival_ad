@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { mkdir, access, readdir } from 'node:fs/promises';
+import { mkdir, access, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -25,20 +25,12 @@ function parseArgs(argv) {
     noEncode: hasFlag(argv, '--no-encode'),
     noMux: hasFlag(argv, '--no-mux'),
     noStill: hasFlag(argv, '--no-still'),
-    keepFrames: true,
+    keepFrames: hasFlag(argv, '--keep-frames'),
+    crf: '18',
+    audioBitrate: '192k',
   };
 
   for (const arg of argv) {
-    if (arg === '--keep-frames') {
-      parsed.keepFrames = true;
-      continue;
-    }
-
-    if (arg === '--no-keep-frames') {
-      parsed.keepFrames = false;
-      continue;
-    }
-
     if (arg.startsWith('--formats=')) {
       const value = arg.slice('--formats='.length).trim();
       parsed.formats = value
@@ -47,6 +39,22 @@ function parseArgs(argv) {
             .map((item) => item.trim())
             .filter(Boolean)
         : [];
+      continue;
+    }
+
+    if (arg.startsWith('--crf=')) {
+      const value = arg.slice('--crf='.length).trim();
+      if (value) {
+        parsed.crf = value;
+      }
+      continue;
+    }
+
+    if (arg.startsWith('--audio-bitrate=')) {
+      const value = arg.slice('--audio-bitrate='.length).trim();
+      if (value) {
+        parsed.audioBitrate = value;
+      }
     }
   }
 
@@ -70,17 +78,13 @@ function resolveSelectedFormats(formatKeys) {
     return FORMATS;
   }
 
-  const selected = formatKeys.map((key) => {
+  return formatKeys.map((key) => {
     const format = getFormatByKey(key);
     if (!format) {
-      throw new Error(
-        `Unknown format key "${key}". Valid options: ${FORMATS.map((item) => item.key).join(', ')}`,
-      );
+      throw new Error(`Unknown format key: ${key}. Valid: ${FORMATS.map((item) => item.key).join(',')}`);
     }
     return format;
   });
-
-  return selected;
 }
 
 function formatPathsFor(key) {
@@ -139,11 +143,134 @@ function cleanOutputs() {
   }
 }
 
+function computeNeededStages(args, selectedFormats) {
+  let renderNeeded = false;
+  let encodeNeeded = false;
+  let muxNeeded = false;
+  let stillNeeded = false;
+
+  for (const format of selectedFormats) {
+    const paths = formatPathsFor(format.key);
+    const firstFrame = path.join(repoRoot, paths.firstFrame);
+    const silentMp4 = path.join(repoRoot, paths.silentMp4);
+    const finalMp4 = path.join(repoRoot, paths.finalMp4);
+    const stillPng = path.join(repoRoot, paths.stillPng);
+
+    if (!args.noRender && (args.force || !fileExists(firstFrame))) {
+      renderNeeded = true;
+    }
+
+    if (!args.noEncode && (args.force || !fileExists(silentMp4))) {
+      encodeNeeded = true;
+    }
+
+    if (!args.noMux && (args.force || !fileExists(finalMp4))) {
+      muxNeeded = true;
+    }
+
+    if (!args.noStill && (args.force || !fileExists(stillPng))) {
+      stillNeeded = true;
+    }
+  }
+
+  return {
+    renderNeeded,
+    encodeNeeded,
+    muxNeeded,
+    stillNeeded,
+    browserNeeded: renderNeeded || stillNeeded,
+    videoNeeded: encodeNeeded || muxNeeded,
+  };
+}
+
+async function assertPlaywrightAvailableIfNeeded(browserNeeded) {
+  if (!browserNeeded) {
+    return;
+  }
+
+  let browser;
+  try {
+    browser = await chromium.launch();
+  } catch {
+    throw new Error(
+      'Playwright Chromium is not available. Install it with: npx playwright install chromium',
+    );
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
+function renderStatus(ran) {
+  return ran ? 'ran' : 'skipped';
+}
+
+function buildManifest({ args, selectedFormats, command }) {
+  const formats = selectedFormats.map((format) => {
+    const paths = formatPathsFor(format.key);
+    const finalMp4 = path.join(repoRoot, paths.finalMp4);
+    const silentMp4 = path.join(repoRoot, paths.silentMp4);
+    const stillPng = path.join(repoRoot, paths.stillPng);
+
+    return {
+      key: format.key,
+      width: format.width,
+      height: format.height,
+      fps: format.fps,
+      duration: format.duration,
+      outputs: {
+        finalMp4: fileExists(finalMp4) ? paths.finalMp4 : null,
+        silentMp4: fileExists(silentMp4) ? paths.silentMp4 : null,
+        stillPng: fileExists(stillPng) ? paths.stillPng : null,
+      },
+    };
+  });
+
+  return {
+    buildTimestampISO: new Date().toISOString(),
+    command,
+    formats,
+    flags: {
+      clean: args.clean,
+      force: args.force,
+      noRender: args.noRender,
+      noEncode: args.noEncode,
+      noMux: args.noMux,
+      noStill: args.noStill,
+      keepFrames: args.keepFrames,
+    },
+  };
+}
+
+function listDeliverables(selectedFormats) {
+  const deliverables = [];
+
+  for (const format of selectedFormats) {
+    const paths = formatPathsFor(format.key);
+    const candidates = [paths.finalMp4, paths.silentMp4, paths.stillPng];
+
+    for (const candidate of candidates) {
+      if (fileExists(path.join(repoRoot, candidate))) {
+        deliverables.push(candidate);
+      }
+    }
+  }
+
+  const manifestPath = path.join('dist', 'manifest.json');
+  if (fileExists(path.join(repoRoot, manifestPath))) {
+    deliverables.push(manifestPath);
+  }
+
+  return deliverables;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const selectedFormats = resolveSelectedFormats(args.formats);
   const fileUrl = toFileUrl(path.join(repoRoot, 'index.html'));
   const audioPath = path.join(repoRoot, 'sound_10s_fade.mp3');
+  const stageNeeds = computeNeededStages(args, selectedFormats);
 
   if (args.clean) {
     cleanOutputs();
@@ -151,31 +278,33 @@ async function main() {
 
   await ensureFolders(selectedFormats);
 
-  console.log('Milestone 7 incremental pipeline + mux audio');
-  console.log('');
-  console.log('Folder contract:');
-  console.log('- dist/<fmt>/festival_<fmt>_silent.mp4');
-  console.log('- dist/<fmt>/festival_<fmt>.mp4');
-  console.log('- tmp/<fmt>/frames/%06d.png');
-  console.log('');
-  console.log('Flags:');
-  console.log(`- clean: ${args.clean}`);
-  console.log(`- force: ${args.force}`);
-  console.log(`- noRender: ${args.noRender}`);
-  console.log(`- noEncode: ${args.noEncode}`);
-  console.log(`- noMux: ${args.noMux}`);
-  console.log(`- noStill: ${args.noStill}`);
-  console.log(`- keepFrames: ${args.keepFrames}`);
+  console.log('Build pipeline');
+  console.log(`Formats: ${selectedFormats.map((format) => format.key).join(', ')}`);
+  console.log(
+    `Stages: render=${!args.noRender} encode=${!args.noEncode} mux=${!args.noMux} still=${!args.noStill}`,
+  );
+  console.log(
+    `Flags: clean=${args.clean} force=${args.force} keep-frames=${args.keepFrames} crf=${args.crf} audio-bitrate=${args.audioBitrate}`,
+  );
 
-  if (!args.noMux && !fileExists(audioPath)) {
+  if (stageNeeds.videoNeeded) {
+    await assertFfmpegAvailable();
+  }
+
+  if (stageNeeds.muxNeeded && !fileExists(audioPath)) {
     throw new Error('Audio file missing: sound_10s_fade.mp3 at repo root.');
   }
 
+  await assertPlaywrightAvailableIfNeeded(stageNeeds.browserNeeded);
+
   const summary = [];
-  const browser = await chromium.launch();
+  let browser = null;
+  let buildSucceeded = false;
 
   try {
-    await assertFfmpegAvailable();
+    if (stageNeeds.browserNeeded) {
+      browser = await chromium.launch();
+    }
 
     for (const format of selectedFormats) {
       const paths = formatPathsFor(format.key);
@@ -192,63 +321,42 @@ async function main() {
       const finalMp4 = path.join(repoRoot, paths.finalMp4);
       const stillPng = path.join(repoRoot, paths.stillPng);
 
-      console.log(`\n[${format.key}] Starting format build...`);
-
       const shouldRender = !args.noRender && (args.force || !fileExists(firstFrame));
-      if (args.noRender) {
-        console.log(`[${format.key}] --no-render set, skipping render.`);
-      } else if (shouldRender) {
-        console.log(`[${format.key}] Rendering frames...`);
+      if (shouldRender) {
         await renderFrames({ browser, format, outDir: framesDir, fileUrl });
         formatSummary.rendered = true;
-      } else {
-        console.log(`[${format.key}] Frames exist, skipping render.`);
       }
 
       const shouldEncode = !args.noEncode && (args.force || !fileExists(silentMp4));
-      if (args.noEncode) {
-        console.log(`[${format.key}] --no-encode set, skipping encode.`);
-      } else {
-        if (shouldEncode && !dirExists(framesDir)) {
-          throw new Error(
-            `Frames missing for ${format.key}. Run without --no-render or delete tmp/${format.key} and rebuild.`,
-          );
-        }
-        if (shouldEncode) {
-          await assertFramesReady(format.key, framesDir);
-          console.log(`[${format.key}] Encoding silent MP4...`);
-          await encodeSilentMp4({ format, framesDir, outPath: silentMp4 });
-          console.log(`[${format.key}] Wrote ${paths.silentMp4}`);
-          formatSummary.encoded = true;
-        } else {
-          console.log(`[${format.key}] Silent MP4 exists, skipping encode.`);
-        }
+      if (shouldEncode && !dirExists(framesDir)) {
+        throw new Error(
+          `Frames missing for ${format.key}. Run without --no-render or delete tmp/${format.key} and rebuild.`,
+        );
+      }
+      if (shouldEncode) {
+        await assertFramesReady(format.key, framesDir);
+        await encodeSilentMp4({ format, framesDir, outPath: silentMp4, crf: args.crf });
+        formatSummary.encoded = true;
       }
 
       const shouldMux = !args.noMux && (args.force || !fileExists(finalMp4));
-      if (args.noMux) {
-        console.log(`[${format.key}] --no-mux set, skipping mux.`);
-      } else {
-        if (shouldMux && !fileExists(silentMp4)) {
-          throw new Error(
-            `Silent MP4 missing for ${format.key}. Run without --no-encode or delete dist/${format.key} and rebuild.`,
-          );
-        }
-        if (shouldMux) {
-          console.log(`[${format.key}] Muxing audio...`);
-          await muxAudio({ silentMp4Path: silentMp4, audioPath, outPath: finalMp4 });
-          console.log(`[${format.key}] Wrote ${paths.finalMp4}`);
-          formatSummary.muxed = true;
-        } else {
-          console.log(`[${format.key}] Final MP4 exists, skipping mux.`);
-        }
+      if (shouldMux && !fileExists(silentMp4)) {
+        throw new Error(
+          `Silent MP4 missing for ${format.key}. Run without --no-encode or delete dist/${format.key} and rebuild.`,
+        );
+      }
+      if (shouldMux) {
+        await muxAudio({
+          silentMp4Path: silentMp4,
+          audioPath,
+          outPath: finalMp4,
+          audioBitrate: args.audioBitrate,
+        });
+        formatSummary.muxed = true;
       }
 
       const shouldRenderStill = !args.noStill && (args.force || !fileExists(stillPng));
-      if (args.noStill) {
-        console.log(`[${format.key}] --no-still set, skipping still.`);
-      } else if (shouldRenderStill) {
-        console.log(`[${format.key}] Rendering still PNG...`);
+      if (shouldRenderStill) {
         await renderStill({
           browser,
           format,
@@ -256,35 +364,47 @@ async function main() {
           fileUrl,
           cssVars: buildCssVars(format),
         });
-        console.log(`[${format.key}] Wrote ${paths.stillPng}`);
         formatSummary.still = true;
-      } else {
-        console.log(`[${format.key}] Still PNG exists, skipping still.`);
       }
 
       summary.push(formatSummary);
+      console.log(
+        `[${format.key}] frames: ${renderStatus(formatSummary.rendered)} | encode: ${renderStatus(formatSummary.encoded)} | mux: ${renderStatus(formatSummary.muxed)} | still: ${renderStatus(formatSummary.still)}`,
+      );
     }
+
+    const manifest = buildManifest({
+      args,
+      selectedFormats,
+      command: process.argv.join(' '),
+    });
+    const manifestPath = path.join(repoRoot, 'dist', 'manifest.json');
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    buildSucceeded = true;
   } finally {
-    await browser.close();
+    if (browser) {
+      await browser.close();
+    }
     await shutdownCapture();
-  }
 
-  if (!args.keepFrames) {
-    for (const format of selectedFormats) {
-      const tmpFormatDir = path.join(repoRoot, 'tmp', format.key);
-      fs.rmSync(tmpFormatDir, { recursive: true, force: true });
+    if (buildSucceeded && !args.keepFrames) {
+      const tmpPath = path.join(repoRoot, 'tmp');
+      if (exists(tmpPath)) {
+        fs.rmSync(tmpPath, { recursive: true, force: true });
+      }
     }
   }
 
-  console.log('\nBuild summary:');
-  for (const item of summary) {
-    const renderStatus = item.rendered ? 'rendered' : 'skipped';
-    const encodeStatus = item.encoded ? 'encoded' : 'skipped';
-    const muxStatus = item.muxed ? 'muxed' : 'skipped';
-    const stillStatus = item.still ? 'rendered' : 'skipped';
-    console.log(
-      `- ${item.format}: render=${renderStatus}, encode=${encodeStatus}, mux=${muxStatus}, still=${stillStatus}`,
-    );
+  const deliverables = listDeliverables(selectedFormats);
+  console.log('\nDeliverables in dist/:');
+  if (deliverables.length === 0) {
+    console.log('- none');
+  } else {
+    for (const deliverable of deliverables) {
+      console.log(`- ${deliverable}`);
+    }
   }
 }
 
