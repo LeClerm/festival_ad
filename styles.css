@@ -279,6 +279,13 @@ html,body{
 
 html[data-mode="still"] #activities{
   display: block;
+  font-size: 46px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.24;
+  color: rgba(200, 200, 194, 0.92);
+  margin-top: calc(24px * var(--uiScale));
+  margin-bottom: calc(28px * var(--uiScale));
 }
 
 .themePrefix{
