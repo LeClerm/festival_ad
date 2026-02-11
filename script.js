@@ -40,6 +40,21 @@
   const isStillMode = mode === "still";
   document.documentElement.dataset.mode = mode;
 
+  if (params.get("debug") === "1") {
+    const debugModeEl = document.createElement("div");
+    debugModeEl.textContent = `mode=${mode}`;
+    debugModeEl.style.position = "fixed";
+    debugModeEl.style.top = "8px";
+    debugModeEl.style.right = "8px";
+    debugModeEl.style.zIndex = "9999";
+    debugModeEl.style.fontSize = "12px";
+    debugModeEl.style.color = "#fff";
+    debugModeEl.style.opacity = "0.7";
+    debugModeEl.style.pointerEvents = "none";
+    debugModeEl.style.fontFamily = "system-ui, sans-serif";
+    document.body.appendChild(debugModeEl);
+  }
+
   // Auto-fit preview scaling (9:16)
   function updateScale() {
     if (isRender) {
@@ -376,11 +391,11 @@ function renderTheme(t) {
     lines.forEach((ln) => {
       ln.stat.classList.remove("isVisible");
       ln.stat.style.opacity = "0";
-      ln.stat.style.transform = "translateY(10px)";
+      ln.stat.style.transform = "translateY(0px)";
     });
   }
 
-  function renderStillState() {
+  function applyStillState() {
     accentBarEl.style.height = `${Math.round(getFullHeight())}px`;
     showFinalHeader();
     hideStats();
@@ -422,11 +437,14 @@ function renderTheme(t) {
 
   // Deterministic renderer for capture
   window.__renderAt = renderAt;
-  window.__renderStill = renderStillState;
+  window.__renderStill = applyStillState;
   window.__duration = config.duration;
 
   if (isStillMode) {
-    renderStillState();
+    applyStillState();
+    if (isRender) {
+      return;
+    }
     return;
   }
 
