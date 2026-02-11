@@ -1,8 +1,10 @@
+import fs from 'node:fs';
 import { mkdir, access } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { FORMATS, getFormatByKey } from './formats.js';
+import { renderFrames, shutdownCapture } from './capture.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +63,10 @@ function formatPathsFor(key) {
   };
 }
 
+function toFileUrl(filePath) {
+  return `file://${path.resolve(filePath).replace(/\\/g, '/')}`;
+}
+
 async function ensureAudioExists() {
   const audioPath = path.join(repoRoot, 'sound_10s_fade.mp3');
   try {
@@ -77,18 +83,19 @@ async function ensureFolders(selectedFormats) {
   for (const format of selectedFormats) {
     const paths = formatPathsFor(format.key);
     await mkdir(path.join(repoRoot, path.dirname(paths.mp4)), { recursive: true });
-    await mkdir(path.join(repoRoot, path.dirname(paths.framesPattern)), { recursive: true });
+    fs.mkdirSync(path.join(repoRoot, paths.framesDir), { recursive: true });
   }
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const selectedFormats = resolveSelectedFormats(args.formats);
+  const fileUrl = toFileUrl(path.join(repoRoot, 'index.html'));
 
   await ensureAudioExists();
   await ensureFolders(selectedFormats);
 
-  console.log('Milestone 4 build pipeline skeleton');
+  console.log('Milestone 5 Playwright frame render');
   console.log('');
   console.log('Folder contract:');
   console.log('- dist/<fmt>/festival_<fmt>.mp4');
@@ -116,10 +123,20 @@ async function main() {
 
   console.log('');
   console.log(`keepFrames: ${args.keepFrames}`);
-  console.log('(rendering not implemented in Milestone 4)');
+
+  try {
+    for (const format of selectedFormats) {
+      const paths = formatPathsFor(format.key);
+      const outDir = path.join(repoRoot, paths.framesDir);
+      fs.mkdirSync(outDir, { recursive: true });
+      await renderFrames({ format, outDir, fileUrl });
+    }
+  } finally {
+    await shutdownCapture();
+  }
 }
 
 main().catch((error) => {
-  console.error(`Build planning failed: ${error.message}`);
+  console.error(`Build failed: ${error.message}`);
   process.exitCode = 1;
 });
