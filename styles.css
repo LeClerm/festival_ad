@@ -6,6 +6,9 @@
   --headerTop: 105px;
   --footerBottom: 90px;
   --middleY: 50%;
+  --stackY: 50%;
+  --stackTranslateY: -50%;
+  --activitiesExtraWidth: 0px;
   --uiScale: 1;
 
   --bg: #121416;
@@ -160,8 +163,8 @@ html,body{
   position: absolute;
   left: 0;
   right: 0;
-  top: var(--middleY);
-  transform: translateY(-50%);
+  top: var(--stackY);
+  transform: translateY(var(--stackTranslateY));
   height: 0; /* stats are absolutely positioned */
 }
 
@@ -262,11 +265,15 @@ html,body{
 
 .activities{
   display: none;
-  font-size: 36px;
+  font-size: 46px;
   font-weight: 560;
   color: var(--muted);
   letter-spacing: 0.01em;
   text-align: center;
+  white-space: nowrap;
+  max-width: calc(var(--W) - 2 * var(--padX) + var(--activitiesExtraWidth));
+  margin-left: auto;
+  margin-right: auto;
   margin-bottom: 14px;
 }
 

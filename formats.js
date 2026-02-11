@@ -10,6 +10,9 @@ export const FORMATS = [
       middlePct: 0.50,
       footerBottomPct: 0.07,
     },
+    stackAlign: 'center',
+    stackYPct: 0.50,
+    activitiesExtraWidthPx: 0,
     safe: {
       topPct: 0.10,
       bottomPct: 0.10,
@@ -24,9 +27,12 @@ export const FORMATS = [
     duration: 10.0,
     anchors: {
       headerTopPct: 0.08,
-      middlePct: 0.50,
+      middlePct: 0.56,
       footerBottomPct: 0.07,
     },
+    stackAlign: 'top',
+    stackYPct: 0.45,
+    activitiesExtraWidthPx: 220,
     safe: {
       topPct: 0.10,
       bottomPct: 0.10,
@@ -41,9 +47,12 @@ export const FORMATS = [
     duration: 10.0,
     anchors: {
       headerTopPct: 0.08,
-      middlePct: 0.50,
+      middlePct: 0.60,
       footerBottomPct: 0.07,
     },
+    stackAlign: 'top',
+    stackYPct: 0.42,
+    activitiesExtraWidthPx: 260,
     safe: {
       topPct: 0.10,
       bottomPct: 0.10,

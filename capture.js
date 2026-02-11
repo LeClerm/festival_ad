@@ -17,11 +17,18 @@ export function buildCssVars(format) {
   const headerTop = Math.round(format.height * format.anchors.headerTopPct);
   const footerBottom = Math.round(format.height * format.anchors.footerBottomPct);
 
+  const stackYPct = format.stackYPct ?? format.anchors.middlePct;
+  const stackTranslateY = format.stackAlign === 'top' ? '0%' : '-50%';
+  const activitiesExtraWidthPx = format.activitiesExtraWidthPx ?? 0;
+
   return {
     '--W': `${format.width}px`,
     '--H': `${format.height}px`,
     '--uiScale': `${format.height / 1920}`,
     '--middleY': `${format.anchors.middlePct * 100}%`,
+    '--stackY': `${stackYPct * 100}%`,
+    '--stackTranslateY': stackTranslateY,
+    '--activitiesExtraWidth': `${activitiesExtraWidthPx}px`,
     '--padX': `${padX}px`,
     '--headerTop': `${headerTop}px`,
     '--footerBottom': `${footerBottom}px`,
