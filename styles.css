@@ -270,8 +270,8 @@ html,body{
   margin-bottom: 14px;
 }
 
-html[data-mode="video"] #activities{
-  display: none;
+html[data-mode="still"] #activities{
+  display: block;
 }
 
 .themePrefix{
@@ -293,4 +293,8 @@ html[data-mode="video"] #activities{
   display: inline-block;
   transform-origin: center center;
   will-change: transform;
+}
+
+html[data-mode="still"] .themeMain{
+  text-shadow: 0 0 24px rgba(255,136,55,0.16);
 }

@@ -34,7 +34,11 @@
     }
   };
 
-  const isRender = new URLSearchParams(location.search).get("render") === "1";
+  const params = new URLSearchParams(location.search);
+  const isRender = params.get("render") === "1";
+  const mode = params.get("mode") || "video";
+  const isStillMode = mode === "still";
+  document.documentElement.dataset.mode = mode;
 
   // Auto-fit preview scaling (9:16)
   function updateScale() {
@@ -215,9 +219,14 @@
     }
   }
 
-  // Full-height bar (top=0 to bottom=1920)
+  function getFullHeight() {
+    const frame = document.getElementById("frame");
+    return frame ? frame.clientHeight : 1920;
+  }
+
+  // Full-height bar (top=0 to bottom=frame height)
   function renderAccentBar(t) {
-    const fullHeight = 1920;
+    const fullHeight = getFullHeight();
     const p = clamp01(t / config.duration);
     const e = easeOutCubic(p);
     accentBarEl.style.height = `${Math.round(fullHeight * e)}px`;
@@ -350,6 +359,40 @@ function renderTheme(t) {
     themePrefixEl.style.transform = "translateY(0)";
   }
 
+
+  function showFinalHeader() {
+    titleEl.style.opacity = "1";
+    titleEl.style.transform = "translateY(0px) scale(1)";
+    titleEl.style.filter = "none";
+
+    dateEl.style.opacity = "1";
+    dateEl.style.transform = "translateY(0px)";
+
+    urlEl.style.opacity = "1";
+    urlEl.style.transform = "translateY(0px)";
+  }
+
+  function hideStats() {
+    lines.forEach((ln) => {
+      ln.stat.classList.remove("isVisible");
+      ln.stat.style.opacity = "0";
+      ln.stat.style.transform = "translateY(10px)";
+    });
+  }
+
+  function renderStillState() {
+    accentBarEl.style.height = `${Math.round(getFullHeight())}px`;
+    showFinalHeader();
+    hideStats();
+
+    themeEl.style.opacity = "1";
+    themePrefixEl.style.opacity = "1";
+    themePrefixEl.style.transform = "translateY(0)";
+    if (themeMainEl) {
+      themeMainEl.style.transform = "translateY(0px) scaleX(1) scaleY(1)";
+    }
+  }
+
   function renderAt(t) {
     // Clean lead-in to prevent any flash of middle content on load/first paint
     if (t < 0.20) {
@@ -379,7 +422,13 @@ function renderTheme(t) {
 
   // Deterministic renderer for capture
   window.__renderAt = renderAt;
+  window.__renderStill = renderStillState;
   window.__duration = config.duration;
+
+  if (isStillMode) {
+    renderStillState();
+    return;
+  }
 
   // In render mode: set the very first frame deterministically and DO NOT run the live loop
   if (isRender) {
