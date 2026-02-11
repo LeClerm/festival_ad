@@ -5,7 +5,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { FORMATS, getFormatByKey } from './formats.js';
 import { renderFrames, shutdownCapture } from './capture.js';
-import { assertFfmpegAvailable, encodeSilentMp4 } from './ffmpeg.js';
+import { assertFfmpegAvailable, encodeSilentMp4, muxAudio } from './ffmpeg.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,7 +57,8 @@ function resolveSelectedFormats(formatKeys) {
 
 function formatPathsFor(key) {
   return {
-    mp4: path.join('dist', key, `festival_${key}_silent.mp4`),
+    silentMp4: path.join('dist', key, `festival_${key}_silent.mp4`),
+    finalMp4: path.join('dist', key, `festival_${key}.mp4`),
     framesDir: path.join('tmp', key, 'frames'),
     framesPattern: path.join('tmp', key, 'frames', '%06d.png'),
   };
@@ -89,7 +90,7 @@ async function ensureFolders(selectedFormats) {
 
   for (const format of selectedFormats) {
     const paths = formatPathsFor(format.key);
-    await mkdir(path.join(repoRoot, path.dirname(paths.mp4)), { recursive: true });
+    await mkdir(path.join(repoRoot, path.dirname(paths.silentMp4)), { recursive: true });
     fs.mkdirSync(path.join(repoRoot, paths.framesDir), { recursive: true });
   }
 }
@@ -101,10 +102,11 @@ async function main() {
 
   await ensureFolders(selectedFormats);
 
-  console.log('Milestone 6 frame render + silent MP4 encode');
+  console.log('Milestone 7 frame render + MP4 encode + audio mux');
   console.log('');
   console.log('Folder contract:');
   console.log('- dist/<fmt>/festival_<fmt>_silent.mp4');
+  console.log('- dist/<fmt>/festival_<fmt>.mp4');
   console.log('- tmp/<fmt>/frames/%06d.png');
   console.log('');
   console.log('Selected formats:');
@@ -121,7 +123,8 @@ async function main() {
   for (const format of selectedFormats) {
     const paths = formatPathsFor(format.key);
     console.log(`- ${format.key}`);
-    console.log(`  • MP4: ${paths.mp4}`);
+    console.log(`  • Silent MP4: ${paths.silentMp4}`);
+    console.log(`  • Final MP4: ${paths.finalMp4}`);
     console.log(`  • Frames: ${paths.framesPattern}`);
   }
 
@@ -141,13 +144,23 @@ async function main() {
     for (const format of selectedFormats) {
       const paths = formatPathsFor(format.key);
       const framesDir = path.join(repoRoot, paths.framesDir);
-      const outPath = path.join(repoRoot, paths.mp4);
+      const silentOutPath = path.join(repoRoot, paths.silentMp4);
+      const finalOutPath = path.join(repoRoot, paths.finalMp4);
+      const audioPath = path.join(repoRoot, 'sound_10s_fade.mp3');
 
       await assertFramesReady(format.key, framesDir);
 
       console.log(`[${format.key}] Encoding silent MP4...`);
-      await encodeSilentMp4({ format, framesDir, outPath });
-      console.log(`[${format.key}] Wrote ${paths.mp4}`);
+      await encodeSilentMp4({ format, framesDir, outPath: silentOutPath });
+      console.log(`[${format.key}] Wrote ${paths.silentMp4}`);
+
+      console.log(`[${format.key}] Muxing audio...`);
+      await muxAudio({
+        silentMp4Path: silentOutPath,
+        audioPath,
+        outPath: finalOutPath,
+      });
+      console.log(`[${format.key}] Wrote ${paths.finalMp4}`);
     }
   } finally {
     await shutdownCapture();

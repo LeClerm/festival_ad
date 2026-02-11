@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { access, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 export function runCommand(command, args = [], options = {}) {
@@ -92,4 +92,44 @@ export async function encodeSilentMp4({ format, framesDir, outPath }) {
   ];
 
   await runCommand('ffmpeg', args);
+}
+
+export async function muxAudio({ silentMp4Path, audioPath, outPath }) {
+  try {
+    await access(silentMp4Path);
+  } catch {
+    throw new Error(`Silent MP4 not found: ${silentMp4Path}`);
+  }
+
+  try {
+    await access(audioPath);
+  } catch {
+    throw new Error(`Audio file not found: ${audioPath}`);
+  }
+
+  await mkdir(path.dirname(outPath), { recursive: true });
+
+  const args = [
+    '-y',
+    '-i',
+    silentMp4Path,
+    '-i',
+    audioPath,
+    '-c:v',
+    'copy',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-shortest',
+    '-movflags',
+    '+faststart',
+    outPath,
+  ];
+
+  try {
+    await runCommand('ffmpeg', args);
+  } catch (error) {
+    throw new Error(`Audio mux failed for ${outPath}: ${error.message}`);
+  }
 }
