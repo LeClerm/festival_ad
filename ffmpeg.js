@@ -67,7 +67,7 @@ function normalizeForFfmpeg(filePath) {
   return filePath.split(path.sep).join('/');
 }
 
-export async function encodeSilentMp4({ format, framesDir, outPath }) {
+export async function encodeSilentMp4({ format, framesDir, outPath, crf = '18' }) {
   await mkdir(path.dirname(outPath), { recursive: true });
 
   const inputPattern = `${normalizeForFfmpeg(framesDir)}/%06d.png`;
@@ -87,14 +87,14 @@ export async function encodeSilentMp4({ format, framesDir, outPath }) {
     '-movflags',
     '+faststart',
     '-crf',
-    '18',
+    String(crf),
     outPath,
   ];
 
   await runCommand('ffmpeg', args);
 }
 
-export async function muxAudio({ silentMp4Path, audioPath, outPath }) {
+export async function muxAudio({ silentMp4Path, audioPath, outPath, audioBitrate = '192k' }) {
   await mkdir(path.dirname(outPath), { recursive: true });
 
   const args = [
@@ -108,7 +108,7 @@ export async function muxAudio({ silentMp4Path, audioPath, outPath }) {
     '-c:a',
     'aac',
     '-b:a',
-    '192k',
+    audioBitrate,
     '-shortest',
     '-movflags',
     '+faststart',
