@@ -1,10 +1,11 @@
 import fs from 'node:fs';
-import { mkdir, access } from 'node:fs/promises';
+import { mkdir, access, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { FORMATS, getFormatByKey } from './formats.js';
 import { renderFrames, shutdownCapture } from './capture.js';
+import { assertFfmpegAvailable, encodeSilentMp4 } from './ffmpeg.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,8 +57,7 @@ function resolveSelectedFormats(formatKeys) {
 
 function formatPathsFor(key) {
   return {
-    mp4: path.join('dist', key, `festival_${key}.mp4`),
-    png: path.join('dist', key, `festival_${key}.png`),
+    mp4: path.join('dist', key, `festival_${key}_silent.mp4`),
     framesDir: path.join('tmp', key, 'frames'),
     framesPattern: path.join('tmp', key, 'frames', '%06d.png'),
   };
@@ -67,12 +67,19 @@ function toFileUrl(filePath) {
   return `file://${path.resolve(filePath).replace(/\\/g, '/')}`;
 }
 
-async function ensureAudioExists() {
-  const audioPath = path.join(repoRoot, 'sound_10s_fade.mp3');
+async function assertFramesReady(formatKey, framesDir) {
   try {
-    await access(audioPath);
+    await access(framesDir);
+    await access(path.join(framesDir, '000000.png'));
+    const files = await readdir(framesDir);
+    const hasPng = files.some((name) => name.toLowerCase().endsWith('.png'));
+    if (!hasPng) {
+      throw new Error('missing png frames');
+    }
   } catch {
-    throw new Error('Required audio file is missing: sound_10s_fade.mp3');
+    throw new Error(
+      `Frames not found for ${formatKey}. Run build without --no-frames (or ensure rendering succeeded).`,
+    );
   }
 }
 
@@ -92,14 +99,12 @@ async function main() {
   const selectedFormats = resolveSelectedFormats(args.formats);
   const fileUrl = toFileUrl(path.join(repoRoot, 'index.html'));
 
-  await ensureAudioExists();
   await ensureFolders(selectedFormats);
 
-  console.log('Milestone 5 Playwright frame render');
+  console.log('Milestone 6 frame render + silent MP4 encode');
   console.log('');
   console.log('Folder contract:');
-  console.log('- dist/<fmt>/festival_<fmt>.mp4');
-  console.log('- dist/<fmt>/festival_<fmt>.png');
+  console.log('- dist/<fmt>/festival_<fmt>_silent.mp4');
   console.log('- tmp/<fmt>/frames/%06d.png');
   console.log('');
   console.log('Selected formats:');
@@ -117,7 +122,6 @@ async function main() {
     const paths = formatPathsFor(format.key);
     console.log(`- ${format.key}`);
     console.log(`  • MP4: ${paths.mp4}`);
-    console.log(`  • PNG: ${paths.png}`);
     console.log(`  • Frames: ${paths.framesPattern}`);
   }
 
@@ -130,6 +134,20 @@ async function main() {
       const outDir = path.join(repoRoot, paths.framesDir);
       fs.mkdirSync(outDir, { recursive: true });
       await renderFrames({ format, outDir, fileUrl });
+    }
+
+    await assertFfmpegAvailable();
+
+    for (const format of selectedFormats) {
+      const paths = formatPathsFor(format.key);
+      const framesDir = path.join(repoRoot, paths.framesDir);
+      const outPath = path.join(repoRoot, paths.mp4);
+
+      await assertFramesReady(format.key, framesDir);
+
+      console.log(`[${format.key}] Encoding silent MP4...`);
+      await encodeSilentMp4({ format, framesDir, outPath });
+      console.log(`[${format.key}] Wrote ${paths.mp4}`);
     }
   } finally {
     await shutdownCapture();
